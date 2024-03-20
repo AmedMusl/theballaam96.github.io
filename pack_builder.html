@@ -469,6 +469,7 @@
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item excluded_link" href="#" onclick="buildCandyPack()" id="build-pack-button"><i class="fa-solid fa-download"></i> Download Candy Pack (Categorized)</a></li>
                                 <li><a class="dropdown-item excluded_link" href="#" onclick="buildBinaryPack()"><i class="fa-solid fa-download"></i> Download Binary Pack</a></li>
+                                <li><a class="dropdown-item d-flex"><input type="checkbox" id="unsafe-song-toggle" class="form-check" /><label for="unsafe-song-toggle" class="ps-2">Include Unsafe Tracks</label></a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item excluded_link" href="#" onclick="uploadPack()"><i class="fa-solid fa-upload"></i> Upload Pack</a></li>
                             </ul>
@@ -485,7 +486,8 @@
                             </a>
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item excluded_link" href="#" data-bs-toggle="modal" data-bs-target="#changelogModal"><i class="fa-solid fa-clipboard"></i> Song Changelog</a></li>
-                                <li><a class="dropdown-item excluded_link" href="#" onclick="submitSong()"><i class="fa-solid fa-music"></i> Submit Song</a></li>
+                                <li><a class="dropdown-item excluded_link" href="https://theballaam96.github.io/submission_form" rel="noreferrer noopener" target="_blank"><i class="fa-solid fa-music"></i> Submit Song</a></li>
+                                <li><a class="dropdown-item excluded_link" href="https://theballaam96.github.io/music_converter" rel="noreferrer noopener" target="_blank"><i class="fa-solid fa-arrows-rotate"></i> Convert Song</a></li>
                                 <li><a class="dropdown-item excluded_link" href="#" onclick="getShareLink(true, false, false, 0, false)"><i class="fa-solid fa-link"></i> Get Shareable Link</a></li>
                                 <li><a class="dropdown-item excluded_link" href="#" onclick="getYTPlaylist()"><i class="fa-brands fa-youtube"></i> Get YouTube Playlist</a></li>
                             </ul>
@@ -628,6 +630,15 @@
                                     <div class="advf-hint">Select all that you are happy with</div>
                                     <div id="tag-list" class="flexsplitter"></div>
                                 </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Show stream-safe songs only</label>
+                                    <br />
+                                    <div class="d-flex">
+                                        <input type='checkbox' class='form-check-input' value='' id='advf-safe' data-toggle='toggle' />
+                                        <label for='advf-safe' class="form-check-label ps-2">Only shows songs which are safe for stream highlights and YouTube VODs</label>
+                                    </div>
+                                </div>
                             </form>
                         </div>
                         <div class="modal-footer">
@@ -733,7 +744,7 @@
             populateTagSuggestions();
 
             const tc_sliders = document.getElementsByClassName("slider-range")
-            const tc_default = [[0, 300], [0, 60]]
+            const tc_default = [[0, 600], [0, 60]]
             const tc_els = ["advf-bgm-length", "advf-noloop-length"]
             tc_els.forEach((el, index) => {
                 $( `#${el}` ).slider({
@@ -781,6 +792,7 @@
                     "noloop-max": parseInt(document.getElementById("advf-noloop-length").getAttribute("value-max")),
                     "composers": filterAdvancedFilterValue(document.getElementById("advf-composer").value),
                     "converters": filterAdvancedFilterValue(document.getElementById("advf-converter").value),
+                    "safe": document.getElementById("advf-safe").checked,
                 }
                 let all_tagged = true;
                 ACCEPTED_TAGS.forEach(tag => {
@@ -1136,6 +1148,8 @@
                 return note
             }
 
+            const unsafe_song_tag = "stream-unsafe"
+
             const site_is_down = false;
             const total_prog = 6;
             async function getMidiData() {
@@ -1225,6 +1239,7 @@
                                         ticked=${parseSeed(state_index) ? 'true' : 'false'} 
                                         group='${group}'
                                         game='${game}'
+                                        safe='${!song.tags.includes(unsafe_song_tag)}'
                                         ${song.notes ? `title='${song.notes}'` : ''}>
                                         <div class='flexsplitter bottom-line'>
                                             <div class='name_data handle-overflow' title='${filterNote(displayed_song_name.replace('.bin',''))}'>${displayed_song_name.replace('.bin','')}</div>
@@ -1248,14 +1263,18 @@
                                                 : ""
                                             }
                                             ${
-                                                song.tags.length > 0 ?
-                                                `<span class='midi-tag' title='${song.tags.join(', ')}'>
+                                                song.tags.filter(t => t != unsafe_song_tag).length > 0 ?
+                                                `<span class='midi-tag' title='${song.tags.filter(t => t != unsafe_song_tag).join(', ')}'>
                                                     <i class='fa-solid fa-tags'></i>
                                                 </span>`
                                                 : ""
                                             }
                                             ${
-                                                song.tags.map((item, index) => index < 10 ? `
+                                                song.tags.includes(unsafe_song_tag) ? 
+                                                "<span class='badge text-bg-danger rounded-pill' title='This song has been tied to copyright claim issues which may result in demonetization.'>Stream Unsafe</span>" : ""
+                                            }
+                                            ${
+                                                song.tags.filter(t => t != unsafe_song_tag).map((item, index) => index < 10 ? `
                                                     <span class='badge text-bg-light rounded-pill'>
                                                         ${item}
                                                     </span>
@@ -1598,6 +1617,8 @@
                 buildPack();
             }
 
+            DUMP_IMAGES = false;
+
             async function buildPack() {
                 const ss_count = getSongSelectedCount();
                 if ((ss_count < 1) && (Object.keys(uploaded_pack_data).length == 0)) {
@@ -1642,17 +1663,9 @@
                                     break;
                                 }
                             }
-                            folder_data[found_data.folder].push({
+                            item_data = {
                                 "song": found_data.song,
                                 "game": found_data.game,
-                                "logo": (async () => {
-                                    if (folder_data[found_data.folder].some(file => file.game === found_data.game)) {
-                                        return folder_data[found_data.folder].find(file => file.game === found_data.game).logo;
-                                    } else {
-                                        const response = await fetch(icon_json[found_data.game]);
-                                        return await response.arrayBuffer();
-                                    }
-                                })(),
                                 "composer": composer,
                                 "converter": converter,
                                 "group": group,
@@ -1660,47 +1673,71 @@
                                 "data": fileData,
                                 "tags": found_data.tags,
                                 "append_extension": true
-                            });
+                            };
+                            if (DUMP_IMAGES) {
+                                item_data["logo"] = (async () => {
+                                    if (folder_data[found_data.folder].some(file => file.game === found_data.game)) {
+                                        return folder_data[found_data.folder].find(file => file.game === found_data.game).logo;
+                                    } else {
+                                        const response = await fetch(icon_json[found_data.game]);
+                                        return await response.arrayBuffer();
+                                    }
+                                })()
+                            }
+                            folder_data[found_data.folder].push(item_data);
                         }
                     }
                 }
                 const zip = new JSZip();
                 const promises = [];
-                const png_zip = zip.folder("music_icons")
+                if (DUMP_IMAGES) {
+                    const png_zip = zip.folder("music_icons")
+                }
                 Object.keys(folder_data).forEach(folder => {
                     const files  = folder_data[folder];
                     const f_zip = zip.folder(folder)
                     files.forEach(file => {
-                        if (output_as_encoded) {
-                            c_zip = new JSZip();
-                            logo_name = filterFilename(`${file.game}.png`)
-                            c_zip.file(filterFilename("song.bin"), file.data); // Song
-                            png_zip.file(logo_name, file.logo); // Game PNG in main zip
-                            // Create a json file for the song info containing the song, game, composer, and converter, and the name of the logo file
-                            c_zip.file(filterFilename("data.json"), JSON.stringify({
-                                "song": file.song,
-                                "game": file.game,
-                                "group": file.group,
-                                "length": file.length,
-                                "logo": logo_name,
-                                "composer": file.composer,
-                                "converter": file.converter,
-                                "tags": file.tags,
-                            }));
-                            promises.push(
-                                c_zip.generateAsync({type:"blob"}).then((content) => {
-                                    if (file.append_extension) {
-                                        f_zip.file(filterFilename(`${file.game} ${file.song}.candy`), content);
-                                    } else {
-                                        f_zip.file(filterFilename(file.song), content);
-                                    }
-                                })
-                            );
-                        } else {
-                            if (file.append_extension) {
-                                f_zip.file(filterFilename(`${file.game} ${file.song}.bin`), file.data);
+                        let allow = true;
+                        const unsafe_allowed = document.getElementById("unsafe-song-toggle").checked;
+                        if (file.tags) {
+                            if (file.tags.includes(unsafe_song_tag) && (!unsafe_allowed)) {
+                                allow = false;
+                            }
+                        }
+                        if (allow) {
+                            if ((output_as_encoded) && (file.append_extension)) {
+                                c_zip = new JSZip();
+                                logo_name = filterFilename(`${file.game}.png`)
+                                c_zip.file(filterFilename("song.bin"), file.data); // Song
+                                if (DUMP_IMAGES) {
+                                    png_zip.file(logo_name, file.logo); // Game PNG in main zip
+                                }
+                                // Create a json file for the song info containing the song, game, composer, and converter, and the name of the logo file
+                                c_zip.file(filterFilename("data.json"), JSON.stringify({
+                                    "song": file.song,
+                                    "game": file.game,
+                                    "group": file.group,
+                                    "length": file.length,
+                                    "logo": logo_name,
+                                    "composer": file.composer,
+                                    "converter": file.converter,
+                                    "tags": file.tags,
+                                }));
+                                promises.push(
+                                    c_zip.generateAsync({type:"blob"}).then((content) => {
+                                        if (file.append_extension) {
+                                            f_zip.file(filterFilename(`${file.game} ${file.song}.candy`), content);
+                                        } else {
+                                            f_zip.file(filterFilename(file.song), content);
+                                        }
+                                    })
+                                );
                             } else {
-                                f_zip.file(filterFilename(file.song), file.data);
+                                if (file.append_extension) {
+                                    f_zip.file(filterFilename(`${file.game} ${file.song}.bin`), file.data);
+                                } else {
+                                    f_zip.file(filterFilename(file.song), file.data);
+                                }
                             }
                         }
                     })
@@ -1919,6 +1956,7 @@
                     .track_count .tags .notes
                     .days_since_submission .is_new
                     .older_revisions .changelog_entry
+                    .safe
                 */
                 const midi_info = midi_data_copy.find(item => item.index == index)
                 const filter_value = document.getElementById("search-game").value.toLowerCase();
@@ -1997,6 +2035,10 @@
                             const tag = key.substring(4)
                             if (key_value) {
                                 valid_entry &= midi_info.tags.length == 0 || midi_info.tags.map(item => item.replaceAll(" ","").toLowerCase()).includes(tag)
+                            }
+                        } else if (key == "safe") {
+                            if (key_value) {
+                                valid_entry &= (!midi_info.tags.includes(unsafe_song_tag));
                             }
                         }
                     })
@@ -2524,11 +2566,6 @@
             function setTextView(state, update_cookie) {
                 document.getElementById("text-view").checked = state;
                 handleTextView(update_cookie);
-            }
-
-            function submitSong() {
-                const LINK = "https://script.google.com/macros/s/AKfycbwetNkcuX68j1hSMt0U2F_xmTHFe3hQp6my3cnHXwxICMJVt5NTyD8_aYcrMqEuSwuyfQ/exec"
-                sendToURL(LINK)
             }
 
             let previous_width = null;

@@ -1,5 +1,6 @@
 /** @type {AudioContext | undefined} */
 let ac;
+let analyzerNode;
 
 let sfontBin;
 let musicBin;
@@ -65,6 +66,10 @@ function loadMusic() {
 			);
 }
 
+let max_volume = 0;
+let avg_volume = 0;
+let volume_points = 0;
+
 async function initializeSynthesizer(useDefaultSFont) {
 	// Load Soundfont binary asynchronously
 	const promiseSFont = loadSFont(useDefaultSFont);
@@ -85,7 +90,12 @@ async function initializeSynthesizer(useDefaultSFont) {
 		synth = new JSSynth.AudioWorkletNodeSynthesizer();
 		synth.init(ac.sampleRate);
 		const node = synth.createAudioNode(ac);
-		node.connect(ac.destination);
+
+		// Create and connect an analyzer node
+		analyzerNode = ac.createAnalyser();
+		analyzerNode.fftSize = 256;
+		node.connect(analyzerNode);
+		analyzerNode.connect(ac.destination);
 	}
 
 	// Load binaries
@@ -94,9 +104,206 @@ async function initializeSynthesizer(useDefaultSFont) {
 	// Load SoundFont data to the synthesizer
 	sfontId = await synth.loadSFont(sfontBin);
 
+	resetVolumeStats();
+	setInterval(() => {
+		// Accumulate Volume Data
+		collateVolumeData();
+	}, 10);
+
 	return synth;
 }
 setPlayingStatus("Stopped")
+
+let volume_graph_data = [];
+let logging_counter = 0;
+
+function resetVolumeStats() {
+	max_volume = 0;
+	avg_volume = 0;
+	volume_points = 0;
+	logging_counter = 0;
+}
+
+const YELLOW_LIMIT = 120;
+const RED_LIMIT = 130;
+
+function getVolumeSeverity(volume) {
+	if (volume > RED_LIMIT) {
+		return 2;
+	}
+	if (volume > YELLOW_LIMIT) {
+		return 1;
+	}
+	return 0;
+}
+
+let displayed_chart = null;
+
+function destroyVolumeChart() {
+	if (!displayed_chart) {
+		return;
+	}
+	displayed_chart.destroy();
+	displayed_chart = null;
+}
+
+function getTimeFromSeconds(secs) {
+	const mins = parseInt(secs / 60);
+	const new_secs = secs - (60 * mins);
+	return `${mins}:${new_secs < 10 ? "0" : ""}${new_secs}`
+}
+
+function getChartLabels(length) {
+	raw_values = [...Array(length).keys()]
+	return raw_values;
+	//return raw_values.map(item => getTimeFromSeconds(parseInt(item / 20)));
+}
+
+function displayVolumeChart() {
+	if (!displayed_chart) {
+		// Render new chart
+		const ctx = document.getElementById('volumeChart');
+	
+		displayed_chart = new Chart(ctx, {
+			type: 'line',
+			data: {
+				labels: getChartLabels(volume_graph_data.length),
+				datasets: [
+					{
+						label: "Red Limit",
+						data: [...Array(volume_graph_data.length).fill(RED_LIMIT)],
+						borderColor: 'rgb(220, 53, 69)',
+						pointStyle: false,
+						pointHitRadius: 0,
+						pointHoverRadius: 0,
+						borderWidth: 1,
+					},
+					{
+						label: "Yellow Limit",
+						data: [...Array(volume_graph_data.length).fill(YELLOW_LIMIT)],
+						borderColor: 'rgb(255, 193, 7)',
+						pointStyle: false,
+						pointHitRadius: 0,
+						pointHoverRadius: 0,
+						borderWidth: 1,
+					},
+					{
+						label: "Average Volume",
+						data: [...Array(volume_graph_data.length).fill(avg_volume)],
+						borderColor: 'rgb(255, 255, 255)',
+						pointStyle: false,
+						pointHitRadius: 0,
+						pointHoverRadius: 0,
+						borderWidth: 1,
+					},
+					{
+						label: 'Song Volume',
+						data: volume_graph_data,
+						borderColor: "rgb(75, 192, 192)",
+						tension: 0.1,
+						pointStyle: false,
+						pointHitRadius: 0,
+						pointHoverRadius: 0,
+						borderWidth: 1,
+					}
+				]
+			},
+			options: {
+				hover: {
+					mode: 'nearest',
+					intersect: false,
+					animationDuration: 0
+				}
+			}
+		});
+	} else {
+		// Update existing chart
+		displayed_chart.data.datasets[0].data = [...Array(volume_graph_data.length).fill(RED_LIMIT)];
+		displayed_chart.data.datasets[1].data = [...Array(volume_graph_data.length).fill(YELLOW_LIMIT)];
+		displayed_chart.data.datasets[2].data = [...Array(volume_graph_data.length).fill(avg_volume)];
+		displayed_chart.data.datasets[3].data = volume_graph_data;
+		displayed_chart.data.labels = getChartLabels(volume_graph_data.length),
+		displayed_chart.options.animations["y"] = {
+			duration: 0
+		}
+		//displayed_chart.options.animation.duration = 0;
+		displayed_chart.update();
+	}
+}
+
+let chart_update_interval_function = null;
+
+function handleChartDisplay(e) {
+	const chart_container_hook = document.getElementById("volumeChartContainer")
+	if (e.checked) {
+		chart_container_hook.removeAttribute("hidden");
+		displayVolumeChart();
+		chart_update_interval_function = setInterval(() => {
+			displayVolumeChart();
+		}, 1000);
+	} else {
+		chart_container_hook.setAttribute("hidden", "hidden");
+		clearInterval(chart_update_interval_function);
+		chart_update_interval_function = null;
+	}
+	console.log(e.checked);
+}
+
+function collateVolumeData() {
+	if (playingStatus != "Playing") {
+		resetVolumeStats();
+		return;
+	}
+	volume_points += 1;
+	const synth_volume = getVolume();
+	logging_counter += 1;
+	if (logging_counter >= 5) {
+		volume_graph_data.push(synth_volume)
+		logging_counter = 0;
+	} 
+	const volume_hook = document.getElementById("volume_demo");
+	avg_volume = ((avg_volume * (volume_points - 1)) + synth_volume) / volume_points;
+	if (synth_volume > max_volume) {
+		max_volume = synth_volume;
+	}
+	const experienced_width = parseInt(3 * synth_volume);
+	volume_hook.style["min-width"] = `${experienced_width}px`
+	volume_hook.style["max-width"] = `${experienced_width}px`
+	const badges = ["success", "warning", "danger"]
+	const colors = ["#194A04", "#f0f000", "#f00000"]
+	current_max_badge = getVolumeSeverity(max_volume);
+	current_avg_badge = getVolumeSeverity(avg_volume);
+	if (document.getElementById("volume_strobing").checked) {
+		current_base_color = 0;
+	} else {
+		current_base_color = getVolumeSeverity(synth_volume);
+	}
+	volume_hook.style["background-color"] = colors[current_base_color];
+	const max_volume_hook = document.getElementById("max_volume_demo");
+	const avg_volume_hook = document.getElementById("avg_volume_demo");
+	badges.forEach(badge => {
+		max_volume_hook.classList.remove(`text-bg-${badge}`);
+		avg_volume_hook.classList.remove(`text-bg-${badge}`);
+	})
+	max_volume_hook.classList.add(`text-bg-${badges[current_max_badge]}`)
+	avg_volume_hook.classList.add(`text-bg-${badges[current_avg_badge]}`)
+	max_volume_hook.innerText = `Max: ${parseInt(max_volume * 10) / 10}`;
+	avg_volume_hook.innerText = `Avg: ${parseInt(avg_volume * 10) / 10}`;
+}
+
+function getVolume() {
+	if (!analyzerNode) {
+		return 0;
+	}
+	const data = new Uint8Array(analyzerNode.frequencyBinCount);
+	analyzerNode.getByteFrequencyData(data);
+	let sum = 0;
+	for (let i = 0; i < data.length; i++) {
+		sum += data[i];
+	}
+	const average = sum / data.length;
+	return average;
+}
 
 function setPlayingStatus(status) {
     const hook = document.getElementById("play-button")
@@ -139,6 +346,11 @@ function setPlayingStatus(status) {
         }
     })
     console.log(`Status: ${status}`)
+	if (status == "Playing") {
+		console.log("Attempt to reset")
+		volume_graph_data = [];
+		destroyVolumeChart();
+	}
 	playingStatus = status;
 }
 
@@ -262,6 +474,8 @@ function navigatorClick(pressing) {
 	} else {
 		navigatorMove(true);
 		synth.seekPlayer(nav_location)
+		resetVolumeStats();
+		volume_graph_data = [];
 	}
 }
 

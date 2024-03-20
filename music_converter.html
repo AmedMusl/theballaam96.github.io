@@ -28,6 +28,8 @@
         <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.js"></script>
         <!-- FA -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+        <!-- ChartJS -->
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <!-- BPS Handling -->
         <script type="text/javascript" src="script/bps.js" defer></script>
         <script type="text/javascript" src="script/MarcFile.js" defer></script>
@@ -54,6 +56,33 @@
             .loop-height {
                 height: 100%;
             }
+            #volume_demo {
+                background-color: green;
+                height: 5px;
+            }
+            .bubble {
+                background: #0d6efd;
+                color: white;
+                padding: 4px 12px;
+                position: absolute;
+                border-radius: 4px;
+                left: 50%;
+                transform: translateX(-50%);
+                top: 2rem;
+            }
+            .bubble::after {
+                content: "";
+                position: absolute;
+                width: 2px;
+                height: 2px;
+                background: #0d6efd;
+                top: -1px;
+                left: 50%;
+            }
+            .range-wrap {
+                position: relative;
+                margin: 0 auto 3rem;
+            }
         </style>
     </head>
     <body>
@@ -73,14 +102,17 @@
                         <li class="nav-item">
                             <a class="nav-link excluded_link" href="#" data-bs-toggle="modal" data-bs-target="#soundfontModal"><i class="fa-solid fa-headphones"></i> Fix Soundfont</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link excluded_link" href="#" data-bs-toggle="modal" data-bs-target="#rebalanceModal"><i class="fa-solid fa-sliders"></i> Rebalance MIDI</a>
+                        </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle excluded_link" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 Resources
                             </a>
                             <ul class="dropdown-menu">
-                                <li><a class="dropdown-item excluded_link" href="#" onclick="goTo('https://docs.google.com/spreadsheets/d/1ngZfHXbsOqFBTTCknMX0WEhyJ_xTcGP_a-1zPPY2AP0/edit#gid=48901832')"><i class="fa-solid fa-font"></i> Soundfont Data Table</a></li>
-                                <li><a class="dropdown-item excluded_link" href="#" onclick="goTo('https://pastebin.com/bSNHLsV3')"><i class="fa-solid fa-list"></i> OST List</a></li>
-                                <li><a class="dropdown-item excluded_link" href="#" onclick="goTo('https://youlean.co/file-loudness-meter/')"><i class="fa-solid fa-volume-high"></i> Loudness Tester</a></li>
+                                <li><a class="dropdown-item excluded_link" href="https://docs.google.com/spreadsheets/d/1ngZfHXbsOqFBTTCknMX0WEhyJ_xTcGP_a-1zPPY2AP0/edit#gid=48901832" rel="noreferrer noopener" target="_blank"><i class="fa-solid fa-font"></i> Soundfont Data Table</a></li>
+                                <li><a class="dropdown-item excluded_link" href="https://pastebin.com/bSNHLsV3" rel="noreferrer noopener" target="_blank"><i class="fa-solid fa-list"></i> OST List</a></li>
+                                <li><a class="dropdown-item excluded_link" href="https://youlean.co/file-loudness-meter/" rel="noreferrer noopener" target="_blank"><i class="fa-solid fa-volume-high"></i> Loudness Tester</a></li>
                             </ul>
                         </li>
                     </ul>
@@ -89,6 +121,7 @@
         </nav>
         <!-- Inputs -->
         <input type="file" class="hide" id="porting-midi-selector" accept=".midi, .mid"/>
+        <input type="file" class="hide" id="rebalancing-midi-selector" accept=".midi, .mid"/>
         <input type="file" class="hide" id="file-selector" accept=".midi, .mid"/>
         <input type="file" class="hide" id="soundfont-selector" accept=".sf2"/>
         <input type="file" class="hide" id="dls-selector" accept=".dls"/>
@@ -160,6 +193,57 @@
                 </div>
             </div>
         </div>
+        <!-- Rebalance Modal -->
+        <div class="modal fade" id="rebalanceModal" tabindex="-1" aria-labelledby="rebalanceModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5" id="rebalanceModalLabel">Rebalance MIDI Volume</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p>
+                            Adjusts all volume events by a factor, to ease rebalancing the audio from a MIDI file.
+                            <br /><br />
+                            <strong>NOTE: </strong>MIDI file volume events cannot exceed a volume of 127. Exceeding this (denoted by "Max Ratio without compromising balance") will mean that your balance between track volumes may be disturbed.
+                        </p>
+                        <div class="d-flex">
+                            <button class="btn btn-primary" onclick="clickEl('rebalancing-midi-selector')" style="width:100%">Load MIDI</button>
+                        </div>
+                        <div id="midi-rebalance-controls" hidden>
+                            <p>
+                                <div>
+                                    <strong>Loaded MIDI: </strong><span id="rebalancing-file-name"></span> 
+                                </div>
+                                <div id="rebalancing-boost-container">
+                                    <strong>Max Ratio without compromising balance: </strong><span id="rebalancing-boost"></span>
+                                </div>
+                            </p>
+                            <div class="d-flex">
+                                <div>
+                                    0%
+                                </div>
+                                <div style="flex:9" class="range-wrap">
+                                    <input type="range" class="form-range" id="rebalancing_ratio" min="0" max="200" style="width:100%"/>
+                                    <output class="bubble" id="rebalancing_bubble">100%</output>
+                                </div>
+                                <div>
+                                    200%
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <button class="btn btn-success" style="width:100%" onclick="rebalanceMidiWrapper()">
+                                    Apply Rebalance
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
         <!-- Porting Modal -->
         <div class="modal fade" id="portingModal" tabindex="-1" aria-labelledby="portingModalLabel" aria-hidden="true">
             <div class="modal-dialog modal-lg">
@@ -212,10 +296,32 @@
             </div>
             <div style="flex: 1" class="m-3">
                 <div id="player" class="card p-3 mb-3" hidden>
-                    <h3>Play Song</h3>
+                    <div class="d-flex">
+                        <h3 style="flex:9">Play Song</h3>
+                        <div class="text-end">
+                            <div>
+                                <label for="volume_strobing">Disable volume bar recolors</label>
+                                <input type="checkbox" id="volume_strobing"/>
+                            </div>
+                            <div>
+                                <label for="volume_chart">Display Volume Chart</label>
+                                <input type="checkbox" id="volume_chart" onclick="handleChartDisplay(this)"/>
+                            </div>
+                        </div>
+                    </div>
                     <div style="font-style:italic;text-align:left">
                         <strong>NOTE:</strong> This won't sound *exactly* like how it will in game. This is just a rough approximation
                     </div>
+                    <div>
+                        <div class="mb-2">
+                            Volume <span id="max_volume_demo" class="badge text-bg-success">Max: 0</span> <span id="avg_volume_demo" class="badge text-bg-success">Avg: 0</span>
+                        </div>
+                        <div id="volume_demo">&nbsp;</div>
+                    </div>
+                    <div id="volumeChartContainer" hidden>
+                        <canvas id="volumeChart"></canvas>
+                    </div>
+
                     <div class="d-flex">
                         <span id="play-button" onclick="playMusic()"><i class="fa-solid fa-play"></i></span>
                         <input
@@ -249,12 +355,12 @@
             <div class="d-flex">
                 <div class="sep">
                     <div class="p-3">
-                        <button onclick="toBinary(true)" class="song-action-button btn btn-success">Convert to binary</button>
+                        <button onclick="convertToBinaryButton()" class="song-action-button btn btn-success">Convert to binary</button>
                     </div>
                 </div>
                 <div class="sep">
                     <div class="req-no-preload p-3">
-                        <button onclick="preloadROMWrite()" class="song-action-button btn btn-primary">Preload ROM Write</button>
+                        <button onclick="clickEl('rom-selector'); preloadROMWrite();" class="song-action-button btn btn-primary">Preload ROM Write</button>
                     </div>
                     <div class="req-preload d-flex hide" hidden>
                         <div class="p-3">
@@ -426,6 +532,10 @@
             const VANILLA_BIN_LIMIT = 16512
             const RANDO_BIN_LIMIT = 32768
 
+            function convertToBinaryButton() {
+                toBinary(true, current_midi_file, "file-selector");
+            }
+
             function updateBinarySize() {
                 toBinary(false, current_midi_file, "file-selector")
                 const data = new Uint8Array(output_bin_file.slice());
@@ -470,6 +580,7 @@
 
             let current_midi_file = []
             let current_porting_midi_file = [];
+            let current_rebalancing_midi_file = [];
             let compressed_midi = []
             let output_bin_file = []
             let rom_file = []
@@ -524,6 +635,31 @@
                 };
                 fr.readAsArrayBuffer(document.getElementById("porting-midi-selector").files[0]);
             })
+            document.getElementById("rebalancing-midi-selector").addEventListener("change", function(e) {
+                var fr = new FileReader();
+                fr.onload = function() {
+                    var data = fr.result;
+                    var array = new Uint8Array(data);
+                    //window.clampMidi(fr.result)
+                    current_rebalancing_midi_file = array.slice()
+                    console.log(current_rebalancing_midi_file)
+                    toBinary(false, current_rebalancing_midi_file, "rebalancing-midi-selector");
+                    const max_boost = getMaximumVolumeBoost(current_rebalancing_midi_file.slice());
+                    const max_boost_hook = document.getElementById("rebalancing-boost");
+                    document.getElementById("rebalancing-boost-container").removeAttribute("hidden");
+                    max_boost_hook.innerText = "";
+                    if (max_boost != null) {
+                        max_boost_hook.innerText = `${parseInt(100 * max_boost)}%`;
+                    } else {
+                        document.getElementById("rebalancing-boost-container").setAttribute("hidden", "hidden");
+                    }
+                    const raw_file_name = document.getElementById("rebalancing-midi-selector").value;
+                    const raw_file_split = raw_file_name.split("\\")
+                    document.getElementById("rebalancing-file-name").innerText = raw_file_split[raw_file_split.length - 1];
+                    document.getElementById("midi-rebalance-controls").removeAttribute("hidden");
+                };
+                fr.readAsArrayBuffer(document.getElementById("rebalancing-midi-selector").files[0]);
+            })
             document.getElementById("soundfont-selector").addEventListener("change", function(e) {
                 var fr = new FileReader();
                 fr.onload = function() {
@@ -565,6 +701,19 @@
                 };
                 fr.readAsArrayBuffer(document.getElementById("rom-selector").files[0]);
             })
+            function setBubble(range, bubble) {
+                const val = range.value;
+                const min = range.min ? range.min : 0;
+                const max = range.max ? range.max : 100;
+                const newVal = Number(((val - min) * 100) / (max - min));
+                bubble.innerHTML = `${val}%`;
+              
+                // Sorta magic numbers based on size of the native UI thumb
+                bubble.style.left = `calc(${newVal}% + (${8 - newVal * 0.15}px))`;
+            }
+            document.getElementById("rebalancing_ratio").addEventListener("input", (e) => {
+                setBubble(document.getElementById("rebalancing_ratio"), document.getElementById("rebalancing_bubble"))
+            }) 
 
             let GLOBAL_NO_REPEATERS_SETTING = true;
 
@@ -634,7 +783,6 @@
                 toBinary(false, current_midi_file, "file-selector")
                 const data = new Uint8Array(output_bin_file.slice());
                 compressed_midi = Array.from(pako.gzip(data, {"level": 9}));
-                clickEl("rom-selector");
             }
 
             function writeToROM() {
@@ -844,7 +992,7 @@
                     }
                     if (permit) {
                         permit_total = true;
-                        html += `<option type=\"radio\" name=\"Select Song\" value=\"${index}\">${song}</option>`
+                        html += `<option type=\"radio\" name=\"Select Song\" value=\"${index}\"${index == 1 ? ' selected' : ''}>${song}</option>`
                     }
                 })
                 hook.innerHTML = html;
@@ -855,6 +1003,17 @@
             function instrumentChange() {
                 toBinary(false, current_porting_midi_file, "porting-midi-selector");
                 readMidiPorting(current_porting_midi_file.slice());
+            }
+
+            function rebalanceMidi(ratio) {
+                toBinary(false, current_rebalancing_midi_file, "rebalancing-midi-selector");
+                adjustMIDIVolume(current_rebalancing_midi_file.slice(), ratio)
+            }
+
+            function rebalanceMidiWrapper() {
+                const rebalance_ratio_hook = document.getElementById("rebalancing_ratio");
+                const ratio = rebalance_ratio_hook.value / 100;
+                rebalanceMidi(ratio);
             }
 
             const TEMPLATE_DATA = [
