@@ -355,9 +355,9 @@
                 static W3Bonus = new Moves("Caves Warp 3 Bonus");
                 static AnyGun = new Moves("Any Gun");
                 // Barriers
-                static JapesCoconut = new Moves("Japes Coconut Gates", true, [], true); // No logic determined yet for this
+                static JapesCoconut = new Moves("Japes Coconut Gates", true, [Moves.Climbing], true);
                 static JapesShellhive = new Moves("Japes Shellhive Gate", true, [Moves.Feather], true);
-                static AztecTunnelDoor = new Moves("Aztec Tunnel Door", true, [Moves.Guitar, Moves.Vines], true);
+                static AztecTunnelDoor = new Moves("Aztec Tunnel Door", true, [Moves.Guitar, Moves.Vines, Moves.Climbing], [Moves.Climbing, Moves.Rocket, Moves.Guitar], true);
                 static Aztec5DT = new Moves("Aztec 5DT Switches", true, [Moves.Rocket, Moves.Peanut], true);
                 static AztecLlama = new Moves("Aztec Llama Switch", true, [Moves.Blast], true);
                 static FactoryProduction = new Moves("Production Room On", true, [Moves.Grab, Moves.Coconut], true);
@@ -912,10 +912,10 @@
                         new Requirement(18, [[Moves.Peanut, Moves.LevelSlam]]),
                         new Requirement(7, [[Moves.Peanut, Moves.Diving, Moves.TinyTempleIce]]),
                         new Requirement(15, [[Moves.AztecTunnelDoor]]),
-                        new Requirement(15, [[Moves.Climbing]]), // Either or with Climb/Rocket
+                        new Requirement(15, [[Moves.AztecTunnelDoor, Moves.Rocket], [Moves.AztecTunnelDoor, Moves.Climbing]]),
                         new Requirement(10, [[Moves.AztecTunnelDoor, Moves.Rocket]]),
                         new Requirement(10, [[Moves.AztecTunnelDoor, Moves.Peanut, Moves.Aztec5DT]]),
-                        new Requirement(10, [[Moves.AztecTunnelDoor, Moves.AztecLlama, Moves.Coconut, Moves.LevelSlam, Moves.Strong, Moves.Peanut]]),
+                        new Requirement(10, llama_temple_guns.map(item => [Moves.AztecTunnelDoor, Moves.LevelSlam, Moves.Strong, Moves.Peanut].concat([item])))
                     ],
                     "Lanky": [
                         new Requirement(5, [[Moves.Moveless]]),
@@ -928,7 +928,7 @@
                     ],
                     "Tiny": [
                         new Requirement(25, [[Moves.AztecTunnelDoor]]),
-                        new Requirement(25, [[Moves.Climbing]]), // I wish I knew how to make this an either/or for Climb or Twirl
+                        new Requirement(25, [[Moves.AztecTunnelDoor, Moves.Twirl], [Moves.AztecTunnelDoor, Moves.Climbing]]),
                         new Requirement(5, [[Moves.Feather, Moves.Mini, Moves.Diving, Moves.TinyTempleIce]]),
                         new Requirement(20, [[Moves.Feather, Moves.Diving, Moves.TinyTempleIce]]),
                         new Requirement(3, llama_temple_guns.map(item => [Moves.AztecTunnelDoor, Moves.AztecLlama].concat([item]))),
